@@ -1,0 +1,11 @@
+{
+  "name": "schedulerapi",
+  "version": "1.0.0",
+  "description": "API for Scheduler application",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Steven Kritikos stevenrkritikos@gmail.com",
+  "license": "ISC"
+}
