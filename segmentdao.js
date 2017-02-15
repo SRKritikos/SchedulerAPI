@@ -58,6 +58,7 @@ let scanSegmentKeys = () => {
 				resolve(keys)
 			} else {
 				scanSegmentKeys()
+				resolve(keys)
 			}
 		})
 	})	
