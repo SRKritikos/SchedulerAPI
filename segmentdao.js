@@ -26,30 +26,50 @@ module.exports =  {
 
 	getAll: () => {
 		return new Promise((resolve, reject) => {
-			let allSegments = []
-			let keys = []
-			redisClient.scan(0, "MATCH", "segments*", (error, reply) => {
-				if (error) {
-					reject(error)
-				}
-				let keys = reply[1]
-				console.log(keys)
+			let segmentKeys = scanSegmentKeys()
+			segmentKeys.then((keys) => {
+				let segmentPromises = []
 				keys.forEach((key) => {
-					redisClient.hgetall(key, (error, reply) => {
-						allSegments.push(reply)
-					})
+					segmentPromises.push(getSegmentForKey(key))
 				})
-				let cursor = reply[0]
-				if (cursor == 0) {
-					console.log(cursor)
-				}
+				let allSegments = []
+				Promise.all(segmentPromises).then((segments) => {
+					allSegments.push(segments)
+					resolve(allSegments)
+				})
 			})
-			console.log(allSegments)
-			resolve(allSegments)
 		})	
 	},
 
 	delete: (segment) => {
 
 	}
+}
+
+let scanSegmentKeys = () => {
+	return new Promise((resolve, reject) => {
+		redisClient.scan(0, "MATCH", "segments*", (error, reply) => {
+			if (error) {
+				reject(error)
+			}
+			let keys = reply[1]
+			let cursor = reply[0]
+			if (cursor == 0) {
+				resolve(keys)
+			} else {
+				scanSegmentKeys()
+			}
+		})
+	})	
+} 
+
+let getSegmentForKey = (key) => {
+	return new Promise((resolve, reject) => {
+		redisClient.hgetall(key, (error, segment) => {
+			if (error) {
+				reject(error)
+			}
+			resolve(segment)
+		})
+	})	
 }
