@@ -2,23 +2,21 @@ const redis = require('redis')
 const redisClient = redis.createClient()
 
 module.exports =  {
-
 	create: (segment) => {
 		return new Promise((resolve, reject) => {
-			redisClient.incr("id", (error, newId) => {
-				id = newId
-				redisClient.hmset("segment:" + newId,
-													"starDate", segment.startDate,
-													"endDate", segment.endDate,
-													"priority", segment.priority,
-													(error, reply) => {
-					if (error) {
-						throw Error(error)
-					}
+			incrementId().then((newId) => {
+				const newSegmentId = "segment:" + newId
+				segment.id = newSegmentId
+				insertSegment(segment).catch((error) => {
+					reject(error)
 				})
-				redisClient.rpush("segmentIds", "segment:" + newId)
-				redisClient.zadd("startDate", segment.startDate, newId)
-				resolve(id);
+				insertIntoSegmentIdsSet(newSegmentId).catch((error) => {
+					reject(error)
+				})
+				insertIntoStartDateSet(segment.startDate, newSegmentId).catch((error) => {
+					reject(error)
+				})
+				resolve(newSegmentId);
 			})
 		})
 	},
@@ -29,89 +27,178 @@ module.exports =  {
 
 	getAllSegments: () => {
 		return new Promise((resolve, reject) => {
-			let segmentKeys = scanSegmentKeys(0)
-			console.log(segmentKeys)
-			segmentKeys.then((keys) => {
-				let segmentPromises = []
-				segmentKeys.forEach((key) => {
-					segmentPromises.push(getSegmentForKey(key))
+			getActiveSegmentIds().then((segmentIds) => {
+				const segmentPromises = []
+				segmentIds.forEach((segmentId) => {
+					segmentPromises.push( getSegmentForSegmentId(segmentId) )
 				})
-				let allSegments = []
-				Promise.all(segmentPromises).then((segments) => {
+				const allSegments = []
+				Promise.all(segmentPromises).then(segments => {
 					allSegments.push(segments)
 					resolve(allSegments)
+				}).catch((error) => {
+					reject(error)
 				})
+			}).catch((error) => {
+				reject(error)
 			})
 		})	
 	},
 
 	getAllSegmentsByDateRange: (startDate, endDate) => {
 		return new Promise((resolve, reject) => {
-			const segmentIds = getSegmentIdsByDateRange(startDate, endDate)
-			const segmentPromises = []
-			segmentIds.then((ids) => {
-				ids.forEach((id) => {
-					segmentPromises.push(getSegmentForKey("segment:"+id))
+			getSegmentIdsByDateRange(startDate, endDate).then((segmentIds) => {
+				const segmentPromises = []
+				segmentIds.forEach((id) => {
+					segmentPromises.push( getSegmentForSegmentId(id) )
 				})
 				const foundSegments = []
 				Promise.all(segmentPromises).then((segments) => {
 					foundSegments.push(segments)
 					resolve(foundSegments)
+				}).catch((error) => {
+					reject(error)
 				})
+			}).catch((error) => {
+				reject(error)
 			})
 		})
 	},
 
-	delete: (segment) => {
-
+	delete: (segmentId) => {
+		return new Promise((resolve, reject) => {
+			removeSegmentIdFromActiveSegmentsSet(segmentId).catch((error) => {
+				reject(error)
+			})
+			removeSegmentIdFromStartDateSet(segmentId).catch((error) => {
+				reject(error)
+			})
+		})
 	}
 }
 
-let scanSegmentKeys = (startCursor) => {
-	return new Promise((resolve, reject) => {
-		redisClient.scan(startCursor, "MATCH", "segment*", (error, reply) => {
-			if (error) {
-				reject(error)
-			}
-			let keys = reply[1]
-			startCursor = reply[0]
-			resolve(keys)
-		})
-	}).then((keys) => {
-		if (startCursor == 0) {
-			return keys
-		} else {
-			return scanSegmentKeys(startCursor)
-		}
-	})	
-} 
+/**
+ * Read functions
+ */
 
-let getSegmentForKey = (key) => {
+const getSegmentForSegmentId = (segmentId) => {
 	return new Promise((resolve, reject) => {
-		redisClient.hgetall(key, (error, segment) => {
+		redisClient.hgetall(segmentId, (error, segment) => {
 			if (error) {
 				reject(error)
 			}
-			segment.id = key
+			segment.id = segmentId
 			resolve(segment)
 		})
 	})	
 }
 
-let getSegmentIdsByDateRange = (startDate, endDate) => {
+const getSegmentIdsByDateRange = (startDate, endDate) => {
 	return new Promise((resolve, reject) => {
-		redisClient.zrange("startDate", startDate,
-											 endDate, "WITHSCORES",
-											 (error, reply) => {
+		redisClient.zrange("startDate", startDate,endDate, (error, segmentIds) => {
 			if (error) {
 				reject(error)
 			}
-			let segmentIds = []
-			for (let i = 1; i < reply.length; i += 2) {
-				segmentIds.push(reply[i])
-			}
-			console.log(segmentIds)
 			resolve(segmentIds)
+		})
+	})
+}
+
+const getActiveSegmentIds = () => {
+	return new Promise((resolve, reject) => {
+		redisClient.smembers("activeSegmentIds", (error, segmentIds) => {
+			if (error) {
+				reject(error)
+			} else {
+				resolve(segmentIds)
+			}
+		})
+	})
+}
+
+/**
+ * Create functions
+ */
+
+const incrementId = () => {
+	return new Promise((resolve, reject) => {
+		redisClient.incr("segmentId", (error, newId) => {
+			if (error) {
+				reject(error)
+			} else {
+				resolve(newId)
+			}
+		})
+	})
+}
+
+const insertSegment = (segment) => {
+	return new Promise((resolve, reject) => {
+		redisClient.hmset(
+			segment.id,
+			"starDate", segment.startDate,
+			"endDate", segment.endDate,
+			"priority", segment.priority,
+			(error, reply) => {
+				if (error) {
+					reject(error)
+				} else {
+					resolve(reply)
+				}	
+			})
+	})								
+}
+
+const insertIntoSegmentIdsSet = (newSegmentId) => {
+	return new Promise((resolve, reject) => {
+		redisClient.sadd("activeSegmentIds", newSegmentId, (error, reply) => {
+			if (error) {
+				reject(error)
+			} else {
+				resolve(reply)
+			}
+		})
+	})
+}
+
+const insertIntoStartDateSet = (startDate, segmentId) => {
+	return new Promise((resolve, reject) => {
+		redisClient.zadd("startDate", startDate, segmentId, (error, reply) => {
+			if (error) {
+				reject(error)
+			} else {
+				resolve(reply)
+			}
+		})
+	})
+}
+
+/**
+ * Delete function
+ */
+
+const removeSegmentIdFromActiveSegmentsSet = (segmentId) => {
+	return new Promise((resolve, reject) => {
+		redisClient.srem("activeSegmentIds", segmentId, (error, reply) => {
+			if (error) {
+				reject(error)
+			} else {
+				console.log(reply)
+				resolve(reply)
+			}
+		})
+	})
+}
+
+const removeSegmentIdFromStartDateSet = (segmentId) => {
+	return new Promise((resolve, reject) => {
+		redisClient.zrem("startDate", segmentId, (error, reply) => {
+			if (error) {
+				reject(error)
+			} else {
+				console.log(reply)
+				resolve(reply)
+			}
 		})
 	})
 }

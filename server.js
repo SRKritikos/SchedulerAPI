@@ -27,7 +27,7 @@ app.get("/segments/", (request, response) => {
 })
 
 app.put('/segments/', (request, response) => {
-	console.log("Update segment ", request.params)
+	console.log("Update segment ", request.body)
 	response.status(200)
 	response.location("/segments/"+1)
 })
@@ -41,6 +41,15 @@ app.post('/segments/', (request, response) => {
 		response.location('/segments/' + id)
 		response.end()
 	})
+})
+
+app.delete("/segments/:segmentId", (request, response) => {
+	console.log("Now deleting segment", request.params.segmentId)
+	 segmentDAO.delete(request.params.segmentId).then(() => {
+		 response.status(200)
+	 }).catch((error) => {
+		 console.log(error)
+	 })
 })
 
 app.listen(port)
