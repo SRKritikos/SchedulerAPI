@@ -7,7 +7,7 @@ module.exports =  {
 		return new Promise((resolve, reject) => {
 			redisClient.incr("id", (error, newId) => {
 				id = newId
-				redisClient.hmset("segments:" + newId,
+				redisClient.hmset("segment:" + newId,
 													"starDate", segment.startDate,
 													"endDate", segment.endDate,
 													"priority", segment.priority,
@@ -16,8 +16,9 @@ module.exports =  {
 						throw Error(error)
 					}
 				})
+				redisClient.rpush("segmentIds", "segment:" + newId)
 				redisClient.zadd("startDate", segment.startDate, newId)
-				resolve(newId);
+				resolve(id);
 			})
 		})
 	},
@@ -29,9 +30,10 @@ module.exports =  {
 	getAllSegments: () => {
 		return new Promise((resolve, reject) => {
 			let segmentKeys = scanSegmentKeys(0)
+			console.log(segmentKeys)
 			segmentKeys.then((keys) => {
 				let segmentPromises = []
-				keys.forEach((key) => {
+				segmentKeys.forEach((key) => {
 					segmentPromises.push(getSegmentForKey(key))
 				})
 				let allSegments = []
@@ -45,13 +47,13 @@ module.exports =  {
 
 	getAllSegmentsByDateRange: (startDate, endDate) => {
 		return new Promise((resolve, reject) => {
-			let segmentIds = getSegmentIdsByDateRange(startDate, endDate)
-			let segmentPromises = []
+			const segmentIds = getSegmentIdsByDateRange(startDate, endDate)
+			const segmentPromises = []
 			segmentIds.then((ids) => {
 				ids.forEach((id) => {
-					segmentPromises.push(getSegmentForKey("segments:"+id))
+					segmentPromises.push(getSegmentForKey("segment:"+id))
 				})
-				let foundSegments = []
+				const foundSegments = []
 				Promise.all(segmentPromises).then((segments) => {
 					foundSegments.push(segments)
 					resolve(foundSegments)
@@ -67,19 +69,20 @@ module.exports =  {
 
 let scanSegmentKeys = (startCursor) => {
 	return new Promise((resolve, reject) => {
-		redisClient.scan(startCursor, "MATCH", "segments*", (error, reply) => {
+		redisClient.scan(startCursor, "MATCH", "segment*", (error, reply) => {
 			if (error) {
 				reject(error)
 			}
 			let keys = reply[1]
-			let cursor = reply[0]
-			if (cursor == 0) {
-				resolve(keys)
-			} else {
-				scanSegmentKeys(cursor)
-				resolve(keys)
-			}
+			startCursor = reply[0]
+			resolve(keys)
 		})
+	}).then((keys) => {
+		if (startCursor == 0) {
+			return keys
+		} else {
+			return scanSegmentKeys(startCursor)
+		}
 	})	
 } 
 

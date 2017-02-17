@@ -36,10 +36,11 @@ app.post('/segments/', (request, response) => {
 	console.log("Now creating segment", request.body)
 	let resourceId = segmentDAO.create(request.body)
 	resourceId.then((id) => {
+		console.log(id)
 		response.status(201)
 		response.location('/segments/' + id)
+		response.end()
 	})
-
 })
 
 app.listen(port)
