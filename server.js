@@ -1,54 +1,79 @@
 const express = require('express')
 const app = express()
 const bodyParser = require('body-parser')
-const segmentDAO = require('./segmentdao.js')
+const planDAO = require('./plandao.js')
 const port = 8080
 
 app.use(bodyParser.urlencoded( {extended : false} ))
 app.use(bodyParser.json())
 
-app.get('/segments/:startTime/:endTime', (request, response) => {
-	console.log("Get segments by datespan called ", request.params)
-	let foundSegments = segmentDAO.getAllSegmentsByDateRange
-							(request.params.startTime, request.params.endTime)
-	foundSegments.then((segments) => {
+app.get('/plans/:startTime/:endTime', (request, response) => {
+	console.log("Get plans by datespan called ", request.params)
+	planDAO.getAllPlansByDateRange(request.params.startTime, request.params.endTime)
+	.then((plans) => {
 		response.status(200)
-		response.json(segments)
-	})
-})
-
-app.get("/segments/", (request, response) => {
-	console.log("getting all segments")
-	let allSegments = segmentDAO.getAllSegments()
-	allSegments.then((segments) => {
-			response.status(200)
-			response.json(segments)
-	})
-})
-
-app.put('/segments/', (request, response) => {
-	console.log("Update segment ", request.body)
-	response.status(200)
-	response.location("/segments/"+1)
-})
-
-app.post('/segments/', (request, response) => {
-	console.log("Now creating segment", request.body)
-	let resourceId = segmentDAO.create(request.body)
-	resourceId.then((id) => {
-		console.log(id)
-		response.status(201)
-		response.location('/segments/' + id)
+		response.json(plans)
+	}).catch((error) => {
+		if (error === 0) {
+			response.status(404)
+		} else {
+			response.status(500)
+		}
 		response.end()
 	})
 })
 
-app.delete("/segments/:segmentId", (request, response) => {
-	console.log("Now deleting segment", request.params.segmentId)
-	 segmentDAO.delete(request.params.segmentId).then(() => {
+app.get("/plans/", (request, response) => {
+	console.log("getting all plans")
+	planDAO.getAllPlans().then((plans) => {
+			response.status(200)
+			response.json(plans)
+	}).catch((error) => {
+		if (error === 0) {
+			response.status(404)
+		} else {
+			response.status(500)
+		}
+			response.end()
+	})
+})
+
+app.put('/plans/', (request, response) => {
+	console.log("Update plan ", request.body)
+	planDAO.update(request.body).then((planId) => {
+		response.status(204)
+		response.location("/plans/" + planId)
+		response.end()
+	}).catch((error) => {
+		if (error === 0) {
+			response.status(404)
+		} else {
+			response.status(500)
+		}
+		response.end() 
+	})
+})
+
+app.post('/plans/', (request, response) => {
+	console.log("Now creating plan", request.body)
+	planDAO.create(request.body).then((planId) => {
+		response.status(201)
+		response.location('/plans/' + planId)
+		response.end()
+	}).catch((error) => {
+		reponse.status(500) 
+		reponse.end()
+	})
+})
+
+app.delete("/plans/:planId", (request, response) => {
+	console.log("Now deleting plan", request.params.planId)
+	 planDAO.delete(request.params.planId).then(() => {
 		 response.status(200)
+		 response.end()
 	 }).catch((error) => {
-		 console.log(error)
+		 response.status(500)
+		 response.end()
 	 })
 })
 
